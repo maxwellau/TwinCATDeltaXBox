@@ -1,0 +1,146 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.9">
+  <POU Name="FB_EnableAxes" Id="{808a8c2f-7573-48f2-998b-c2311e14506e}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_EnableAxes
+VAR_INPUT
+	bEnableAxes: BOOL:= TRUE;
+	fOverride:	LREAL	:= 100.0;
+END_VAR
+VAR_OUTPUT
+	bAllAxesReady:	BOOL:= FALSE;
+	Error: BOOL;
+END_VAR
+VAR_IN_OUT
+	io_X:	AXIS_REF;
+	io_Y:	AXIS_REF;
+	io_Z:	AXIS_REF;
+	//io_C:	AXIS_REF;
+	io_M1:	AXIS_REF;
+	io_M2:	AXIS_REF;
+	io_M3:	AXIS_REF;
+END_VAR
+
+VAR
+	
+	fbPowerX:	MC_Power;
+	fbPowerY:	MC_Power;
+	fbPowerZ:	MC_Power;
+	fbPowerC:	MC_Power;
+	fbPowerM1:	MC_Power;
+	fbPowerM2:	MC_Power;
+	fbPowerM3:	MC_Power;
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[io_X.ReadStatus();
+io_Y.ReadStatus();
+io_Z.ReadStatus();
+//io_C.ReadStatus();
+io_M1.ReadStatus();
+io_M2.ReadStatus();
+io_M3.ReadStatus();
+
+
+fbPowerX(
+	Enable:=bEnableAxes, 
+	Enable_Positive:=bEnableAxes, 
+	Enable_Negative:=bEnableAxes, 
+	Override:=fOverride, 
+	BufferMode:= , 
+	Axis:=io_X, 
+	Status=> , 
+	Busy=> , 
+	Active=> , 
+	Error=> , 
+	ErrorID=> );
+fbPowerY(
+	Enable:=bEnableAxes, 
+	Enable_Positive:=bEnableAxes, 
+	Enable_Negative:=bEnableAxes, 
+	Override:=fOverride, 
+	BufferMode:= , 
+	Axis:=io_Y, 
+	Status=> , 
+	Busy=> , 
+	Active=> , 
+	Error=> , 
+	ErrorID=> );	
+fbPowerZ(
+	Enable:=bEnableAxes, 
+	Enable_Positive:=bEnableAxes, 
+	Enable_Negative:=bEnableAxes, 
+	Override:=fOverride, 
+	BufferMode:= , 
+	Axis:=io_Z, 
+	Status=> , 
+	Busy=> , 
+	Active=> , 
+	Error=> , 
+	ErrorID=> );	
+(*fbPowerC(
+	Enable:=bEnableAxes, 
+	Enable_Positive:=bEnableAxes, 
+	Enable_Negative:=bEnableAxes, 
+	Override:=fOverride, 
+	BufferMode:= , 
+	Axis:=io_C, 
+	Status=> , 
+	Busy=> , 
+	Active=> , 
+	Error=> , 
+	ErrorID=> );	*)
+fbPowerM1(
+	Enable:=bEnableAxes, 
+	Enable_Positive:=bEnableAxes, 
+	Enable_Negative:=bEnableAxes, 
+	Override:=fOverride, 
+	BufferMode:= , 
+	Axis:=io_M1, 
+	Status=> , 
+	Busy=> , 
+	Active=> , 
+	Error=> , 
+	ErrorID=> );	
+fbPowerM2(
+	Enable:=bEnableAxes, 
+	Enable_Positive:=bEnableAxes, 
+	Enable_Negative:=bEnableAxes, 
+	Override:=fOverride, 
+	BufferMode:= , 
+	Axis:=io_M2, 
+	Status=> , 
+	Busy=> , 
+	Active=> , 
+	Error=> , 
+	ErrorID=> );	
+fbPowerM3(
+	Enable:=bEnableAxes, 
+	Enable_Positive:=bEnableAxes, 
+	Enable_Negative:=bEnableAxes, 
+	Override:=fOverride, 
+	BufferMode:= , 
+	Axis:=io_M3, 
+	Status=> , 
+	Busy=> , 
+	Active=> , 
+	Error=> , 
+	ErrorID=> );	
+bAllAxesReady	:= fbPowerX.Status AND fbPowerY.Status AND fbPowerZ.Status (*AND fbPowerC.Status*) AND 
+	fbPowerM1.Status AND fbPowerM2.Status AND fbPowerM3.Status;
+	
+Error			:= fbPowerX.Error OR fbPowerY.Error OR fbPowerZ.Error OR fbPowerC.Error
+	OR fbPowerM1.Error OR fbPowerM2.Error OR fbPowerM3.Error;]]></ST>
+    </Implementation>
+    <LineIds Name="FB_EnableAxes">
+      <LineId Id="3" Count="2" />
+      <LineId Id="122" Count="0" />
+      <LineId Id="6" Count="39" />
+      <LineId Id="124" Count="11" />
+      <LineId Id="109" Count="0" />
+      <LineId Id="47" Count="36" />
+      <LineId Id="2" Count="0" />
+      <LineId Id="137" Count="1" />
+      <LineId Id="136" Count="0" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

@@ -1,0 +1,96 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.9">
+  <POU Name="FB_NCReset" Id="{d83b1de7-7e0f-4566-96d0-6e23c2699b81}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_NCReset
+VAR_INPUT
+	bReset : BOOL;
+END_VAR
+VAR_OUTPUT
+	bResetDone : BOOL;
+	ResetError: BOOL;
+END_VAR
+VAR_IN_OUT
+	io_X:	AXIS_REF;
+	io_Y:	AXIS_REF;
+	io_Z:	AXIS_REF;
+
+	io_M1:	AXIS_REF;
+	io_M2:	AXIS_REF;
+	io_M3:	AXIS_REF;
+	
+END_VAR
+VAR
+	fbResetX : MC_Reset;
+	fbResetY : MC_Reset;
+	fbResetZ : MC_Reset;
+	
+	fbResetM1 : MC_Reset;
+	fbResetM2 : MC_Reset;
+	fbResetM3 : MC_Reset;
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[fbResetX(
+	Axis:= io_X, 
+	Execute:= bReset, 
+	Done=> , 
+	Busy=> , 
+	Error=> , 
+	ErrorID=> );
+	
+	fbResetY(
+	Axis:= io_Y, 
+	Execute:= bReset, 
+	Done=> , 
+	Busy=> , 
+	Error=> , 
+	ErrorID=> );
+	
+	fbResetZ(
+	Axis:= io_Z, 
+	Execute:= bReset, 
+	Done=> , 
+	Busy=> , 
+	Error=> , 
+	ErrorID=> );
+	
+	fbResetM1(
+	Axis:= io_M1, 
+	Execute:= bReset, 
+	Done=> , 
+	Busy=> , 
+	Error=> , 
+	ErrorID=> );
+	
+	fbResetM2(
+	Axis:= io_M2, 
+	Execute:= bReset, 
+	Done=> , 
+	Busy=> , 
+	Error=> , 
+	ErrorID=> );
+	
+	fbResetM3(
+	Axis:= io_M3, 
+	Execute:= bReset, 
+	Done=> , 
+	Busy=> , 
+	Error=> , 
+	ErrorID=> );
+	
+	
+	bResetDone		:= (fbResetX.Done AND fbResetY.Done AND fbResetZ.Done)
+	OR (fbResetM1.Done AND fbResetM2.Done AND fbResetM3.Done);
+	
+	
+	ResetError			:= fbResetX.Error OR fbResetY.Error OR fbResetZ.Error
+	OR fbResetM1.Error OR fbResetM2.Error OR fbResetM3.Error;]]></ST>
+    </Implementation>
+    <LineIds Name="FB_NCReset">
+      <LineId Id="17" Count="9" />
+      <LineId Id="87" Count="0" />
+      <LineId Id="28" Count="42" />
+      <LineId Id="9" Count="0" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

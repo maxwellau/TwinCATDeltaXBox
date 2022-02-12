@@ -1,0 +1,69 @@
+<?xml version="1.0"?>
+<TcLicenseInfo xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://www.beckhoff.com/schemas/2011/11/TcLicenseInfo">
+	<LicenseInfo>
+		<SystemId>{16D58BAF-9D8F-3D14-630A-E911F9402F03}</SystemId>
+		<IssueTime>2022-02-09T11:22:00</IssueTime>
+		<ExpireTime>2022-02-17T00:00:00</ExpireTime>
+		<LicenseKey>edd23c2eb5a9e1efd45a9b9b69b9d7c85a93a7131d97089a82db47e4e9d7c0f4db2b9959d2e80a84118a08e05ba6ff2d4655be3376bb940d55f921162e06a4a8b5d82f4be157acb646bc72a8d396eebfcb9baa6b0e74b640f0651bf44c312abb2bac77a3073a90f07cc5cfae98402a549afbfc14c43dcbd6a68b6903234afc1e0e43c1070fa858ac7f0c833e87b11acd5874b0aed54dcac93446d2507f472e3e0b0cbbf2f9e54128d7e82db4c69393f439d2aef22c9ad47caf08fdcd9acb67d46e61c476f2cac6d0c0f1a8390381750fe291650b0105b1b38055a5f51a4b1d4b94a674c105971726eadd4a64a2c4aa171f5450150636ca81e3295fa571ea906b</LicenseKey>
+		<License>
+			<LicenseId>{4C256767-E6E6-4AF5-BD68-9F7ABAD0C200}</LicenseId>
+			<Name>TC3 ADS</Name>
+			<OrderNo>TC1000</OrderNo>
+		</License>
+		<License>
+			<LicenseId>{3FF18E97-7754-401B-93FB-70544DE28A13}</LicenseId>
+			<Name>TC3 IO</Name>
+			<OrderNo>TC1100</OrderNo>
+		</License>
+		<License>
+			<LicenseId>{66689887-CCBD-452C-AC9A-039D997C6E66}</LicenseId>
+			<Name>TC3 PLC</Name>
+			<OrderNo>TC1200</OrderNo>
+		</License>
+		<License>
+			<LicenseId>{A19036CF-A53B-4E3A-99FF-023EF5C4798B}</LicenseId>
+			<Name>TC3 NC PTP Axis</Name>
+			<Instances>10</Instances>
+		</License>
+		<License>
+			<LicenseId>{520DE751-9DB6-47CB-8240-BD5C466E7E64}</LicenseId>
+			<Name>TC3 NC PTP</Name>
+			<OrderNo>TF5000</OrderNo>
+		</License>
+		<License>
+			<LicenseId>{DEA72F0A-9EA0-48F4-ABB5-766516202B8E}</LicenseId>
+			<Name>TC3 NC I</Name>
+			<OrderNo>TF5100</OrderNo>
+		</License>
+		<License>
+			<LicenseId>{B56E7280-5DD4-4AB8-8075-075DD69C1C3D}</LicenseId>
+			<Name>TC3 Kinematic Transformation L2</Name>
+			<OrderNo>TF5111</OrderNo>
+		</License>
+		<License>
+			<LicenseId>{C0BF0BC1-CBED-4D55-86DC-0706BF289DCE}</LicenseId>
+			<Name>TC3 Kinematic Transformation L1</Name>
+			<OrderNo>TF5110</OrderNo>
+		</License>
+		<License>
+			<LicenseId>{C13CAEC7-1F41-4491-935E-FF6254005C74}</LicenseId>
+			<Name>TC3 Physics Base</Name>
+			<OrderNo>TF5440</OrderNo>
+		</License>
+		<License>
+			<LicenseId>{EDABAF2B-31BD-44EA-812D-3BEA277A1355}</LicenseId>
+			<Name>TC3 Kinematic Transformation L3</Name>
+			<OrderNo>TF5112</OrderNo>
+		</License>
+		<License>
+			<LicenseId>{A15FA260-08A3-4DCD-93E9-5F22F7D234ED}</LicenseId>
+			<Name>TC3 Motion Pick-and-Place</Name>
+			<OrderNo>TF5420</OrderNo>
+		</License>
+		<License>
+			<LicenseId>{AECBCEB9-4222-4369-8961-4A7488DAE203}</LicenseId>
+			<Name>TC3 HVAC</Name>
+			<OrderNo>TF8000</OrderNo>
+		</License>
+	</LicenseInfo>
+</TcLicenseInfo>

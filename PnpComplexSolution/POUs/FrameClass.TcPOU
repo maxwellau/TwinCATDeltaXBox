@@ -1,0 +1,198 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.9">
+  <POU Name="FrameClass" Id="{494de9e0-eb30-4118-9b19-660d2a4d7b01}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FrameClass
+VAR_INPUT
+	AllFrames : ARRAY [0..20] OF StructFrame;
+END_VAR
+VAR_OUTPUT
+END_VAR
+VAR
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[]]></ST>
+    </Implementation>
+    <Method Name="DuplicateExists" Id="{4c0d7f0f-c44b-4de5-9f9f-1a7ee1126f00}">
+      <Declaration><![CDATA[METHOD DuplicateExists : INT
+VAR_INPUT
+	sTargetAlias : STRING;
+END_VAR
+VAR
+	i : INT;
+	n : INT;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[
+FOR i := 0 TO 20 DO
+	IF AllFrames[i].sAlias = sTargetAlias THEN
+		n := i;
+		EXIT;
+	ELSE n:=0;
+	END_IF
+END_FOR
+
+DuplicateExists := n;]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="FindFirstEmpty" Id="{dbc83be6-9e01-48c0-bed1-c73635c56031}">
+      <Declaration><![CDATA[METHOD FindFirstEmpty : INT;
+VAR_INPUT
+END_VAR
+VAR
+	EmptyArr : ARRAY[0..20] OF StructFrame;
+	i: INT;
+	n: INT := 0;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[FOR i:=1 TO 20 DO
+	IF AllFrames[i].rXpos = 0.0 AND AllFrames[i].rYpos = 0.0 AND AllFrames[i].rZpos = 0.0 AND AllFrames[i].sAlias = '' THEN
+		FindFirstEmpty := i;
+		EXIT;
+	END_IF
+END_FOR]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="GetNonEmptyFrameAlias" Id="{ecabe442-790f-435a-9e97-b1468f072709}">
+      <Declaration><![CDATA[METHOD GetNonEmptyFrameAlias : ARRAY [0..20] OF STRING;
+VAR_INPUT
+END_VAR
+VAR
+	i : INT;
+	NonEmptyFrames : ARRAY [0..20] OF StructFrame;
+	emptyArray : ARRAY [0..20] OF STRING;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[NonEmptyFrames := NonEmpty();
+FOR i := 0 TO 20 DO
+	emptyArray[i] := NonEmptyFrames[i].sAlias;
+END_FOR
+GetNonEmptyFrameAlias := emptyArray;]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="MapArrangedAliasToFrameIndex" Id="{85f5c58b-a959-4faf-ad1b-28794b23e3ad}">
+      <Declaration><![CDATA[METHOD MapArrangedAliasToFrameIndex : ARRAY[0..20] OF StructFrame;
+VAR_INPUT
+	arrangedAlias : ARRAY [0..20] OF STRING;
+	NonEmptyFrames : ARRAY [0..20] OF StructFrame;
+END_VAR
+
+VAR
+	mappedArray : ARRAY [0..20] OF StructFrame;
+	aliasIndex : INT;
+	framesIndex : INT;
+	arrangedIndex : INT := 0;
+	emptyFrame : StructFrame;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[FOR aliasIndex := 0 TO 20 DO
+	IF arrangedAlias[aliasIndex] <>  'select' THEN
+		FOR framesIndex := 0 TO 20 DO
+			IF arrangedAlias[aliasIndex] = NonEmptyFrames[framesIndex].sAlias THEN
+				mappedArray[arrangedIndex] := NonEmptyFrames[framesIndex];
+				arrangedIndex := arrangedIndex + 1;
+				EXIT;
+			END_IF
+		END_FOR
+	ELSE
+		mappedArray[arrangedIndex] := emptyFrame;
+		arrangedIndex := arrangedIndex + 1;
+	END_IF
+END_FOR
+
+MapArrangedAliasToFrameIndex := mappedArray;]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="NonEmpty" Id="{7514c85b-d3cb-4aaf-a59d-4aec763a260f}">
+      <Declaration><![CDATA[METHOD NonEmpty : ARRAY [0..20] OF StructFrame;
+VAR_INPUT
+END_VAR
+VAR
+	EmptyArray : ARRAY [0..20] OF StructFrame;
+	i : INT;
+	n : INT := 0;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[FOR i:=1 TO 20 DO
+	IF (AllFrames[i].sAlias <> '' ) THEN
+		EmptyArray[n] := AllFrames[i];
+		n := n+1;
+	END_IF
+END_FOR
+NonEmpty := EmptyArray;]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="Teach" Id="{cb1dc23b-6b3f-4e2b-89ef-3a06cf855ec7}">
+      <Declaration><![CDATA[METHOD Teach : BOOL
+VAR_INPUT
+	iArrayIndex : INT;
+	rCurrentXpos : LREAL;
+	rCurrentYpos : LREAL;
+	rCurrentZpos : LREAL;
+	sAlias : STRING;
+END_VAR
+VAR
+	bSuccess : BOOL := FALSE;
+	AugmentedFrame : StructFrame;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[AllFrames[iArrayIndex].rXpos := rCurrentXpos;
+AllFrames[iArrayIndex].rYpos := rCurrentYpos;
+AllFrames[iArrayIndex].rZpos := rCurrentZpos;
+AllFrames[iArrayIndex].sAlias := sAlias;
+Teach := TRUE;]]></ST>
+      </Implementation>
+    </Method>
+    <LineIds Name="FrameClass">
+      <LineId Id="9" Count="0" />
+    </LineIds>
+    <LineIds Name="FrameClass.DuplicateExists">
+      <LineId Id="17" Count="0" />
+      <LineId Id="5" Count="0" />
+      <LineId Id="9" Count="0" />
+      <LineId Id="11" Count="0" />
+      <LineId Id="13" Count="0" />
+      <LineId Id="25" Count="0" />
+      <LineId Id="12" Count="0" />
+      <LineId Id="10" Count="0" />
+      <LineId Id="16" Count="0" />
+      <LineId Id="15" Count="0" />
+    </LineIds>
+    <LineIds Name="FrameClass.FindFirstEmpty">
+      <LineId Id="20" Count="4" />
+      <LineId Id="5" Count="0" />
+    </LineIds>
+    <LineIds Name="FrameClass.GetNonEmptyFrameAlias">
+      <LineId Id="12" Count="0" />
+      <LineId Id="5" Count="0" />
+      <LineId Id="9" Count="1" />
+      <LineId Id="13" Count="0" />
+    </LineIds>
+    <LineIds Name="FrameClass.MapArrangedAliasToFrameIndex">
+      <LineId Id="5" Count="0" />
+      <LineId Id="20" Count="0" />
+      <LineId Id="16" Count="0" />
+      <LineId Id="22" Count="1" />
+      <LineId Id="27" Count="0" />
+      <LineId Id="26" Count="0" />
+      <LineId Id="24" Count="0" />
+      <LineId Id="19" Count="0" />
+      <LineId Id="28" Count="2" />
+      <LineId Id="21" Count="0" />
+      <LineId Id="17" Count="0" />
+      <LineId Id="32" Count="0" />
+      <LineId Id="31" Count="0" />
+    </LineIds>
+    <LineIds Name="FrameClass.NonEmpty">
+      <LineId Id="21" Count="5" />
+      <LineId Id="5" Count="0" />
+    </LineIds>
+    <LineIds Name="FrameClass.Teach">
+      <LineId Id="21" Count="0" />
+      <LineId Id="18" Count="2" />
+      <LineId Id="5" Count="0" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

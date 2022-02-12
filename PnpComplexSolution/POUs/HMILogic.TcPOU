@@ -1,0 +1,212 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.9">
+  <POU Name="HMILogic" Id="{50410414-934b-453f-b77d-63eece6a22a7}" SpecialFunc="None">
+    <Declaration><![CDATA[PROGRAM HMILogic
+VAR
+	bHmiTeach : BOOL := FALSE;
+	bOverride : BOOL := FALSE;
+
+	rCurrentx : LREAL := 0;
+	rCurrenty : LREAL := 0;
+	rCurrentz : LREAL := 0;
+	sCurrentalias : STRING := 'frame';
+	
+	PRINT : STRING := '';
+	
+	iCurrentIndex : INT := 0;
+	
+	iDuplicateIndex : INT := 0;
+	
+	bThrowHmiException : BOOL := FALSE;
+	
+	TaughtFrames : ARRAY [0..20] OF StructFrame;
+	FrameObject : FrameClass := (AllFrames := TaughtFrames);
+	NonEmptyFrames : ARRAY [0..20] OF StructFrame;
+	NonEmptyFrameAlias : ARRAY [0..20] OF STRING;
+	
+	bHmiArrange : BOOL;
+	ArrangedAliasInputs : ARRAY [0..20] OF STRING;
+	ArrangedIndex : ARRAY[0..20] OF INT;
+	ArrangedFrames : ARRAY [0..20] OF StructFrame;
+	
+	bRun : BOOL := FALSE;
+	
+	switches : (resting, checkduplicates, handleexception, getframeindex, teachframe, getnonempties);
+	bPowerDisable: BOOL;
+	bmanual: BOOL;
+	bLatch : BOOL;
+	iPGT: INT;
+	
+	XboxController : Xbox;
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[(*Run.A_EnableManualMovement();
+Run.nManual := 0;
+IF bPowerDisable THEN
+		Run.A_EnableManualMovement();
+		bmanual := FALSE;
+	END_IF
+	
+	IF bmanual THEN
+		Run.A_ReadXYZValue();
+	ELSE
+		Run.nManual := 0;
+	END_IF*)
+
+(*rCurrentx  := GVL.stAxis[1].NcToPlc.ActPos;
+rCurrenty  := GVL.stAxis[2].NcToPlc.ActPos;
+rCurrentz  := GVL.stAxis[3].NcToPlc.ActPos;	
+Run.A_ReadXYZValue();
+	rCurrentx  := GVL.stAxis[1].NcToPlc.ActPos;
+	rCurrenty  := GVL.stAxis[2].NcToPlc.ActPos;
+	rCurrentz  := GVL.stAxis[3].NcToPlc.ActPos;
+*)
+	
+IF bHmiTeach OR bLatch THEN // if TEACH button is pressed on the HMI
+	iPGT := 0;
+	
+	CASE switches OF
+	
+		resting: // resting state
+			MAIN.bmanual := TRUE;
+			IF MAIN.bReadDone THEN
+				rCurrentx  := Round2DP(GVL.stAxis[1].NcToPlc.ActPos);
+				rCurrenty  := Round2DP(GVL.stAxis[2].NcToPlc.ActPos);
+				rCurrentz  := Round2DP(GVL.stAxis[3].NcToPlc.ActPos);
+				bLatch := TRUE;
+			END_IF
+			PRINT := 'RESTING';
+			switches := checkduplicates;
+			
+		checkduplicates: // identify duplicates and throw exception if found
+			PRINT := 'CHECKING DUPLICATES';
+			iDuplicateIndex := FrameObject.DuplicateExists(sTargetAlias := sCurrentalias); // function returns index of found duplicate, 0 if none are found
+			IF iDuplicateIndex = 0 THEN
+				switches := getframeindex; // if no duplicates are found, get the first empty frame to teach
+			ELSE
+				switches := handleexception; // handle the exception
+			END_IF
+			
+		handleexception:
+				bThrowHmiException := TRUE; // feedback error to OnButtonUp on the Teach Button to get permission to override
+				IF bOverride THEN // if user chooses to override
+				PRINT := 'TEACHING FRAMES';
+				FrameObject.Teach(iArrayIndex := iDuplicateIndex, rCurrentXpos:= rCurrentx, rCurrentYpos:= rCurrenty,
+										rCurrentZpos:= rCurrentz, sAlias:= sCurrentalias); // teach frames
+				switches := getnonempties; // filters empty frames
+				bOverride := FALSE; // reset variables
+				bThrowHmiException := FALSE;
+				ELSE
+					switches := resting; // filters empty frames
+					bHmiTeach := FALSE;
+				END_IF
+	
+		getframeindex:
+			PRINT := 'GETTING FRAME INDEX';
+			iCurrentIndex := FrameObject.FindFirstEmpty(); // get the first empty frame to teach
+			switches := teachframe;
+		
+		teachframe:
+			PRINT := 'TEACHING FRAMES';
+			FrameObject.Teach(iArrayIndex := iCurrentIndex, rCurrentXpos:= rCurrentx, rCurrentYpos:= rCurrenty,
+	 						rCurrentZpos:= rCurrentz, sAlias:= sCurrentalias); // teach frames
+			switches := getnonempties;
+		
+		getnonempties:
+			PRINT := 'GETTING NON EMPTIES';
+			NonEmptyFrames := FrameObject.NonEmpty(); // get non-empty frames
+			NonEmptyFrameAlias := FrameObject.GetNonEmptyFrameAlias(); // get array of aliases to display in ARRANGE page
+			switches := resting;
+			bHmiTeach := FALSE;
+			MAIN.bmanual := FALSE;
+			bLatch := FALSE;
+			MAIN.bPowerDisable := TRUE;
+	
+	END_CASE
+
+ELSIF bRun THEN
+	MAIN.bPowerDisable := FALSE;	
+	//MAIN.bmanual := TRUE;
+	
+ELSE
+		MAIN.bPowerDisable := TRUE;
+END_IF
+
+
+IF bHmiArrange THEN
+	PRINT := 'asasddas';
+	ArrangedFrames := FrameObject.MapArrangedAliasToFrameIndex(arrangedAlias := ArrangedAliasInputs, NonEmptyFrames := NonEmptyFrames);
+END_IF
+
+]]></ST>
+    </Implementation>
+    <Method Name="Round2DP" Id="{c562ec2a-7d4d-4b41-bff9-64f8b6f01f53}">
+      <Declaration><![CDATA[METHOD Round2DP : LREAL
+VAR_INPUT
+	Num : LREAL;
+END_VAR
+VAR
+	meh : INT;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[Num := Num * 100;
+meh := REAL_TO_INT(Num);
+Num := INT_TO_REAL(meh);
+Num := Num / 100;
+Round2DP := Num;
+]]></ST>
+      </Implementation>
+    </Method>
+    <LineIds Name="HMILogic">
+      <LineId Id="180" Count="0" />
+      <LineId Id="184" Count="0" />
+      <LineId Id="163" Count="8" />
+      <LineId Id="152" Count="0" />
+      <LineId Id="175" Count="0" />
+      <LineId Id="177" Count="1" />
+      <LineId Id="134" Count="0" />
+      <LineId Id="224" Count="2" />
+      <LineId Id="223" Count="0" />
+      <LineId Id="227" Count="0" />
+      <LineId Id="176" Count="0" />
+      <LineId Id="160" Count="0" />
+      <LineId Id="367" Count="1" />
+      <LineId Id="370" Count="0" />
+      <LineId Id="151" Count="0" />
+      <LineId Id="39" Count="0" />
+      <LineId Id="310" Count="5" />
+      <LineId Id="309" Count="0" />
+      <LineId Id="282" Count="0" />
+      <LineId Id="289" Count="0" />
+      <LineId Id="42" Count="18" />
+      <LineId Id="95" Count="1" />
+      <LineId Id="303" Count="0" />
+      <LineId Id="94" Count="0" />
+      <LineId Id="62" Count="16" />
+      <LineId Id="304" Count="2" />
+      <LineId Id="275" Count="0" />
+      <LineId Id="80" Count="1" />
+      <LineId Id="323" Count="0" />
+      <LineId Id="321" Count="0" />
+      <LineId Id="324" Count="1" />
+      <LineId Id="322" Count="0" />
+      <LineId Id="307" Count="0" />
+      <LineId Id="319" Count="0" />
+      <LineId Id="82" Count="0" />
+      <LineId Id="277" Count="0" />
+      <LineId Id="83" Count="2" />
+      <LineId Id="100" Count="0" />
+      <LineId Id="86" Count="1" />
+      <LineId Id="5" Count="0" />
+    </LineIds>
+    <LineIds Name="HMILogic.Round2DP">
+      <LineId Id="7" Count="0" />
+      <LineId Id="5" Count="0" />
+      <LineId Id="8" Count="0" />
+      <LineId Id="10" Count="1" />
+      <LineId Id="9" Count="0" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

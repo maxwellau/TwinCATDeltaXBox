@@ -1,0 +1,31 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.9">
+  <POU Name="LoadModel" Id="{2c3102db-f6b6-4a4e-b1bf-97c6dc05c8fb}" SpecialFunc="None">
+    <Declaration><![CDATA[PROGRAM LoadModel
+VAR
+	bDone : BOOL;
+	iPrediction : INT;
+END_VAR
+
+VAR_INPUT
+	bPython : BOOL;
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[IF bPython THEN
+	IF bDone THEN
+		bPython := FALSE;
+		bDone := FALSE;
+	END_IF
+END_IF]]></ST>
+    </Implementation>
+    <LineIds Name="LoadModel">
+      <LineId Id="5" Count="0" />
+      <LineId Id="11" Count="0" />
+      <LineId Id="13" Count="0" />
+      <LineId Id="15" Count="0" />
+      <LineId Id="14" Count="0" />
+      <LineId Id="12" Count="0" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

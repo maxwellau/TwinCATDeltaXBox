@@ -1,0 +1,971 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.9">
+  <POU Name="RunXbox" Id="{084420fa-c50e-4ad9-b1e9-9c847adf6949}" SpecialFunc="None">
+    <Declaration><![CDATA[PROGRAM RunXbox
+VAR	
+	buffer					: ARRAY[1..4096] OF BYTE;
+	path					: MC_PATH_DATA_REF(ADR(buffer), SIZEOF(buffer));
+	
+	aTargetPos				: ARRAY[1..cAxesCount] OF MC_LREAL;
+	aTransitionParam		: ARRAY[1..2] OF MC_LREAL;
+	
+	fVelFactor				: LREAL := 1.0;
+	
+	fbPower					: FB_EnableAxes;
+	fbAddAllAxes			: FB_AddAllAxes;
+	fbGroupEnable			: MC_GroupEnable;
+	fbMoveLinPrep			: MC_MoveLinearAbsolutePreparation;
+	fbMovePath				: MC_MovePath;
+	fbStop					: MC_GroupStop;
+	fbUngroupAxes			: MC_UngroupAllAxes;
+	fbGroupReset			: MC_GroupReset;
+	fbGroupReadStatus		: MC_GroupReadStatus;
+	fbGroupSetOvr			: MC_GroupSetOverride;
+	
+	nState					: INT := -5;
+	nNextState				: INT;
+	bMovePrepError			: BOOL;
+	bPickCycle				: BOOL;
+	bExecutePath			: BOOL := TRUE;
+	
+	bUserIncrementStep		: BOOL; // user can go to next step
+	bUserInfiniteMovement 	: BOOL := TRUE; // user can decide if only one movement is executed or infinite movement.
+	bUserStop				: BOOL; // user triggered stop
+	bUserForceUngroup		: BOOL; // user triggered ungroup axes
+	bUserForceReset			: BOOL; // user triggered reset
+	
+	
+	
+	
+	bUserEnableAxes:	BOOL:= TRUE;
+	bUserConfigGroup:	BOOL	:= FALSE;
+	bUserCartesianMode:	BOOL	:= TRUE;
+	bUserResetKinGroup:	BOOL	:= FALSE;		
+	
+	in_stKinToPlc	AT %I*:	NcToPlc_NciChannel_Ref;
+	in_stItpToPlc	AT %I*:	NcToPlc_NciChannel_Ref;
+	out_stPlcToKin	AT %Q*:	PLCTONC_NCICHANNEL_REF;
+	out_stPlcToItp	AT %Q*:	PLCTONC_NCICHANNEL_REF;
+	
+	//:	FB_EnableAxes;
+	bAllAxesReady:	BOOL;
+	
+	stAxesConfig:	ST_KinAxes;
+	fbConfigKinGroup:	FB_KinConfigGroup;
+	fbResetKinGroup:	FB_KinResetGroup;
+	
+	//MODDED CODE VARIABLES
+	frameHome : StructFrame := (rXpos := 0, rXpos := 0, rZpos := 147.0, sAlias := 'Home');
+	iFrameSequence : INT := 0;
+	bRunSequence: BOOL;
+	
+	
+	//////////////
+	//Reset
+	bResetNC: BOOL;
+	bKinFactoryReset: BOOL;
+	bResetKinGrp: BOOL;
+	nReset: INT;
+	nKinReset: INT;
+	nGroupReset: INT;
+	bKinResetDone: BOOL;
+	bGroupResetDone: BOOL;
+	fbNCReset	: FB_NCReset;
+	bInitMove : BOOL := TRUE;
+	iInterpolation : INT := 5;
+	bRepeat : BOOL := FALSE;
+	
+	timerDisable: TON;
+	bMagnet: BOOL;
+	
+	controller : Xbox;
+	rCurrentx: REAL;
+	rCurrenty: REAL;
+	rCurrentz: REAL;
+	frameNow : StructFrame;
+	frameTarget : StructFrame;
+END_VAR
+
+VAR_INPUT
+	arrangedFrames : ARRAY [0..20] OF StructFrame;
+	nManual: INT;
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[//==========================================
+// PnpSimpleSample V1.3
+//==========================================
+
+//==========================================
+//	Set variable bUserIncrementStep:= TRUE to go to the next step
+//	Variable bUserInfiniteMovement defines if only one movement or infinite
+//	movement is executed.
+//==========================================
+
+
+
+fbGroupReadStatus(
+	AxesGroup:= stGroupRef , 
+	Enable:= TRUE , 
+	Valid=> , 
+	Busy=> , 
+	GroupMoving=> , 
+	GroupHoming=> , 
+	GroupErrorStop=> , 
+	GroupNotReady=> , 
+	GroupStandby=> , 
+	GroupStopping=> , 
+	GroupDisabled=> , 
+	Error=> , 
+	ErrorId=> );
+IF fbGroupReadStatus.Error THEN
+	nState := 9998;
+ELSIF NOT fbGroupReadStatus.Valid THEN
+	nState := 9999;	
+END_IF
+
+fbGroupSetOvr(
+	AxesGroup:= stGroupRef, 
+	Enable:= TRUE, 
+	VelFactor:= fVelFactor , 
+	Enabled=> , 
+	Busy=> , 
+	Error=> , 
+	ErrorId=> , 
+	ActualVelFactor=> );
+
+IF fbGroupSetOvr.Error THEN
+	nState := 9999;
+END_IF
+	
+	
+
+
+fbPower(
+	io_X:= stAxis[1],
+	io_Y:= stAxis[2],
+	io_Z:= stAxis[3],
+	//io_C:= stAxis[4],
+	io_M1:= stACSAxis[1],
+	io_M2:= stACSAxis[2],
+	io_M3:= stACSAxis[3],);
+	
+
+stAxesConfig.nAxisIdsAcs[1]	:= stACSAxis[1].NcToPlc.AxisId;
+stAxesConfig.nAxisIdsAcs[2]	:= stACSAxis[2].NcToPlc.AxisId;
+stAxesConfig.nAxisIdsAcs[3]	:= stACSAxis[3].NcToPlc.AxisId;
+stAxesConfig.nAxisIdsMcs[1]	:= stAxis[1].NcToPlc.AxisId;
+stAxesConfig.nAxisIdsMcs[2]	:= stAxis[2].NcToPlc.AxisId;
+stAxesConfig.nAxisIdsMcs[3]	:= stAxis[3].NcToPlc.AxisId;	
+	
+
+CASE nState OF
+-5:
+	IF bUserIncrementStep THEN
+		nNextState := nState +1; 
+		nState := 101;
+		fbAddAllAxes(Execute:= FALSE);
+		fbGroupEnable(AxesGroup:=stGroupRef , Execute:=FALSE);
+		fbMovePath(AxesGroup:=stGroupRef ,PathData:=path ,Execute:= FALSE);
+		bMovePrepError := FALSE;
+	END_IF
+-4:	
+	fbPower.bEnableAxes := TRUE;
+	
+	IF fbPower.bAllAxesReady THEN
+		IF bUserIncrementStep THEN
+			nNextState := nState +1;
+			nState := 101;
+		END_IF
+	ELSIF	fbPower.Error THEN
+		nState := nState +1000;	
+	END_IF
+	
+-3:
+	fbConfigKinGroup(
+		bExecute:=bUserConfigGroup , 
+		bCartesianMode:=bUserCartesianMode , 
+		stAxesList:=stAxesConfig , 
+		stKinRefIn:= in_stKinToPlc, 
+		bBusy=> , 
+		bDone=> , 
+		bError=> , 
+		nErrorId=> );
+	
+	fbResetKinGroup(
+		bExecute:=bUserResetKinGroup, 
+		nItpChannelId:=0 , 
+		stKinRefIn:=in_stKinToPlc, 
+		stAxesList:=stAxesConfig, 
+		bBusy=> , 
+		bDone=> , 
+		bError=> , 
+		nErrorId=> );
+		
+	IF fbConfigKinGroup.bDone AND fbResetKinGroup.bDone THEN
+		nNextState:= nState + 1;
+		nState:= 101;
+	ELSIF fbConfigKinGroup.bError OR fbResetKinGroup.bError THEN
+		nState:= nState + 1000;
+	END_IF
+	
+-2:
+	//Add all axes to group
+	fbAddAllAxes(Execute:= TRUE);
+	
+	IF fbAddAllAxes.Done THEN
+		IF bUserIncrementStep THEN
+			fbAddAllAxes(Execute:= FALSE);
+			nNextState := nState +1;
+			nState := 101;
+		END_IF
+	ELSIF fbAddAllAxes.Error THEN
+		nState := nState +1000;
+	END_IF
+	
+-1:	
+	//Enable Group
+	fbGroupEnable(AxesGroup:=stGroupRef , Execute:=TRUE);
+	 
+	IF fbGroupEnable.Done THEN
+		IF bUserIncrementStep THEN
+			fbGroupEnable(AxesGroup:=stGroupRef , Execute:=FALSE);
+			nNextState := nState +1;
+			nState := 101;
+		END_IF
+	ELSIF fbGroupEnable.Error THEN
+		nState := nState +1000;
+	END_IF
+0:
+	//Fill path table and start execution with fbMovePath
+	IF bUserIncrementStep OR bUserInfiniteMovement THEN
+		(*IF bPickCycle THEN 
+			//Prepare table (MC_MoveLinearAbsolutePreparation)
+			A_PreparePathPick();
+		ELSE
+			//Prepare table (MC_MoveLinearAbsolutePreparation)	
+			A_PreparePathPlace();
+		END_IF		
+		bPickCycle := NOT bPickCycle;*)
+		IF bRunSequence THEN
+			
+			IF controller.bDpadUp THEN
+			frameNow.rXpos  := GVL.stAxis[1].NcToPlc.ActPos;
+			frameNow.rYpos  := GVL.stAxis[2].NcToPlc.ActPos;
+			frameNow.rZpos  := GVL.stAxis[3].NcToPlc.ActPos;
+			
+			frameTarget := frameNow;
+			frameTarget.rYpos := frameNow.rYpos + 2;
+			MoveToPositionGeneral(currentFrame := frameNow, targetFrame := frameTarget, interpolation := 30);
+			
+			ELSIF controller.bDpadDown THEN
+			frameNow.rXpos  := GVL.stAxis[1].NcToPlc.ActPos;
+			frameNow.rYpos  := GVL.stAxis[2].NcToPlc.ActPos;
+			frameNow.rZpos  := GVL.stAxis[3].NcToPlc.ActPos;
+			
+			frameTarget := frameNow;
+			frameTarget.rYpos := frameNow.rYpos - 2;
+			MoveToPositionGeneral(currentFrame := frameNow, targetFrame := frameTarget, interpolation := 30);
+			
+			ELSIF controller.bDpadLeft THEN
+			frameNow.rXpos  := GVL.stAxis[1].NcToPlc.ActPos;
+			frameNow.rYpos  := GVL.stAxis[2].NcToPlc.ActPos;
+			frameNow.rZpos  := GVL.stAxis[3].NcToPlc.ActPos;
+			
+			frameTarget := frameNow;
+			frameTarget.rXpos := frameNow.rXpos - 2;
+			MoveToPositionGeneral(currentFrame := frameNow, targetFrame := frameTarget, interpolation := 30);
+			
+			ELSIF controller.bDpadRight THEN
+			frameNow.rXpos  := GVL.stAxis[1].NcToPlc.ActPos;
+			frameNow.rYpos  := GVL.stAxis[2].NcToPlc.ActPos;
+			frameNow.rZpos  := GVL.stAxis[3].NcToPlc.ActPos;
+			
+			frameTarget := frameNow;
+			frameTarget.rYpos := frameNow.rXpos + 2;
+			MoveToPositionGeneral(currentFrame := frameNow, targetFrame := frameTarget, interpolation := 30);
+			
+
+		END_IF
+			IF bMovePrepError THEN
+				nState := nState +1000;
+			ELSE
+				fbMovePath(AxesGroup:= stGroupRef, PathData:= path, Execute:= FALSE);
+				IF bUserInfiniteMovement THEN
+					nState := nState +1;
+				ELSIF bUserIncrementStep THEN
+					nNextState := nState + 1;
+					nState := 101;
+				END_IF				
+			END_IF	
+		END_IF
+	END_IF	
+
+1:
+	//Execute prepared movement
+	fbMovePath(
+		AxesGroup:= stGroupRef , 
+		PathData:= path , 
+		Execute:= bExecutePath
+	);
+	
+	IF fbMovePath.Done THEN
+		IF bUserIncrementStep THEN
+			//ungroup axes
+			nNextState := 50;
+			nState := 101;
+			fbMovePath(AxesGroup:= stGroupRef, PathData:= path, Execute:= FALSE);
+		ELSIF bUserInfiniteMovement THEN
+			nState := nState -1;
+			fbMovePath(AxesGroup:= stGroupRef, PathData:= path, Execute:= FALSE);
+		END_IF
+	ELSIF fbMovePath.Error THEN
+		nState := nState + 1000;	
+	END_IF
+20:
+	fbStop(AxesGroup:=stGroupRef, Execute:= FALSE);
+	fbStop(AxesGroup:=stGroupRef, Execute:= TRUE, Jerk:= MC_IGNORE);
+	nState := nState + 1;
+21:
+	fbStop(AxesGroup:=stGroupRef,Execute:= TRUE);
+	IF fbStop.Done THEN
+		IF bUserIncrementStep THEN
+			fbStop(AxesGroup:=stGroupRef, Execute:= FALSE);
+			nNextState := 0;
+			nState := 101;
+		END_IF 		
+	ELSIF fbStop.Error THEN
+		nState := nState +1000;
+	END_IF
+50:
+	//Disable group and remove all axes 
+	fbUngroupAxes(AxesGroup:= stGroupRef, Execute:= FALSE);
+	//Check that axes are not moving else we will get a position jump
+	IF fbGroupReadStatus.GroupStandby OR fbGroupReadStatus.GroupErrorStop OR fbGroupReadStatus.GroupNotReady THEN
+		fbUngroupAxes(AxesGroup:= stGroupRef, Execute:= TRUE);
+		nState := nState + 1;
+	END_IF	
+51:
+	fbUngroupAxes(
+		AxesGroup:= stGroupRef , 
+		Execute:= TRUE, 
+		Done=> , 
+		Busy=> , 
+		Error=> , 
+		ErrorId=> );
+	
+	IF fbUngroupAxes.Done THEN
+		IF bUserIncrementStep THEN
+			nNextState := -5;
+			nState := 101;
+		END_IF
+	ELSIF fbUngroupAxes.Error THEN
+		nState := nState +1000;
+	END_IF
+80:
+	fbGroupReset(AxesGroup:= stGroupRef , Execute:= FALSE);
+	fbGroupReset(AxesGroup:= stGroupRef , Execute:= TRUE);
+	nState := nState +1;
+81:	
+	fbGroupReset(
+		AxesGroup:= stGroupRef , 
+		Execute:= , 
+		Done=> , 
+		Busy=> , 
+		Error=> , 
+		ErrorId=> );
+	
+	IF fbGroupReset.Done THEN
+		IF bUserIncrementStep THEN
+			IF fbGroupReadStatus.GroupDisabled THEN
+				nNextState := -5;
+			ELSE
+				nNextState := 0;
+			END_IF
+			nState := 101;
+		END_IF				
+	END_IF	
+101:
+	IF (bUserIncrementStep) THEN				
+		nState := nNextState;
+		bUserIncrementStep := FALSE;
+	END_IF
+1000..9999:
+	;//Error				
+END_CASE
+
+IF bUserStop THEN
+	nState := 20;
+	bUserStop := FALSE;
+END_IF
+IF bUserForceUngroup THEN
+	nState := 50;
+	bUserForceUngroup := FALSE;
+END_IF
+IF bUserForceReset THEN
+	nState := 80;
+	bUserForceReset := FALSE;
+END_IF
+
+
+]]></ST>
+    </Implementation>
+    <Action Name="A_AlwaysActive" Id="{72dc24b4-2a9e-433e-9c70-5ec5e9eb1ffb}">
+      <Implementation>
+        <ST><![CDATA[
+fbGroupReadStatus(
+	AxesGroup:= stGroupRef , 
+	Enable:= TRUE , 
+	Valid=> , 
+	Busy=> , 
+	GroupMoving=> , 
+	GroupHoming=> , 
+	GroupErrorStop=> , 
+	GroupNotReady=> , 
+	GroupStandby=> , 
+	GroupStopping=> , 
+	GroupDisabled=> , 
+	Error=> , 
+	ErrorId=> );
+IF fbGroupReadStatus.Error THEN
+	nState := 9998;
+ELSIF NOT fbGroupReadStatus.Valid THEN
+	nState := 9999;	
+END_IF
+
+fbGroupSetOvr(
+	AxesGroup:= stGroupRef, 
+	Enable:= TRUE, 
+	VelFactor:= fVelFactor , 
+	Enabled=> , 
+	Busy=> , 
+	Error=> , 
+	ErrorId=> , 
+	ActualVelFactor=> );
+
+IF fbGroupSetOvr.Error THEN
+	nState := 9999;
+END_IF
+	
+	
+fbPower(
+	io_X:= stAxis[1],
+	io_Y:= stAxis[2],
+	io_Z:= stAxis[3],
+	io_M1:= stACSAxis[1],
+	io_M2:= stACSAxis[2],
+	io_M3:= stACSAxis[3]);
+	
+fbNCReset( 
+	bResetDone=> , 
+	ResetError=> , 
+	io_X:= stAxis[1],     
+	io_Y:= stAxis[2],     
+	io_Z:= stAxis[3],     
+	io_M1:= stACSAxis[1], 
+	io_M2:= stACSAxis[2], 
+	io_M3:= stACSAxis[3]);	
+
+stAxesConfig.nAxisIdsAcs[1]	:= stACSAxis[1].NcToPlc.AxisId;
+stAxesConfig.nAxisIdsAcs[2]	:= stACSAxis[2].NcToPlc.AxisId;
+stAxesConfig.nAxisIdsAcs[3]	:= stACSAxis[3].NcToPlc.AxisId;
+stAxesConfig.nAxisIdsMcs[1]	:= stAxis[1].NcToPlc.AxisId;
+stAxesConfig.nAxisIdsMcs[2]	:= stAxis[2].NcToPlc.AxisId;
+stAxesConfig.nAxisIdsMcs[3]	:= stAxis[3].NcToPlc.AxisId;	
+	
+timerDisable();]]></ST>
+      </Implementation>
+    </Action>
+    <Action Name="A_EnableManualMovement" Id="{4e6f4549-7f59-463f-a92f-788168fe5d85}">
+      <Implementation>
+        <ST><![CDATA[
+	fbPower.bEnableAxes := FALSE;
+	timerDisable(IN:= TRUE, PT:= T#20MS, Q=> , ET=> );
+	IF timerDisable.Q THEN
+		fbPower.fOverride := 0;
+		fbPower.bEnableAxes := TRUE;
+		timerDisable(IN:=FALSE);
+		fbNCReset.bReset:=TRUE;
+		MAIN.bPowerDisable := FALSE;
+	END_IF]]></ST>
+      </Implementation>
+    </Action>
+    <Action Name="A_HomePosition" Id="{d09fd277-bbbb-4ce9-beff-33e62d2b2e70}">
+      <Implementation>
+        <ST><![CDATA[path.ClearPath();  //Clear nodes that were in path
+
+fbMoveLinPrep.Position						:= ADR(aTargetPos); //pointer to position array
+fbMoveLinPrep.PositionCount 				:= cAxesCount; //number of axes in group
+fbMoveLinPrep.TransitionParameter			:= ADR (aTransitionParam); //pointer to transition parameter array
+fbMoveLinPrep.TransitionParameterCount		:= 2; //number of transition parameters, has to be set always 2
+fbMoveLinPrep.BufferMode					:= mcBlendingPrevious;
+fbMoveLinPrep.TransitionMode				:= mcTransModeCornerDistanceAdvanced;
+//Set dynamics to default values of the axes
+fbMoveLinPrep.Acceleration					:= MC_DEFAULT;
+fbMoveLinPrep.Deceleration					:= MC_DEFAULT;
+fbMoveLinPrep.Jerk							:= MC_DEFAULT;
+
+(* I want to interpolate frames by taking current frame and  next frame,
+	and split into N sections, how do i retrieve the current frame? *)
+
+//1st node
+aTargetPos[1]				:= 0.0;
+aTargetPos[2]				:= 0.0;
+aTargetPos[3]				:= 147.0;
+////aTargetPos[4]			:= 0;
+aTransitionParam[1]			:= 0; //blending distance on previous segment, no influence here
+aTransitionParam[2]			:= 0; //blending distance on this segment, no influence here
+fbMoveLinPrep(PathData:= path , Velocity:= 200, Acceleration:= 30000, Deceleration:= 30000, Jerk:= 100000, InvokeId:= 10);
+bMovePrepError := bMovePrepError OR fbMoveLinPrep.Error;
+
+(*
+aTargetPos[1]				:= 100;
+aTargetPos[2]				:= 100;
+aTargetPos[3]				:= -600;
+//aTargetPos[4]			:= 90;
+aTransitionParam[1]			:= 30; //blending distance on previous segment (InvokeId=10), defines when to leave line
+aTransitionParam[2]			:= 45; //blending distance on this segment, defines latest positionn to be back  on line of InovkeId=20 
+fbMoveLinPrep(PathData:= path , Velocity:=200, Acceleration:= 30000, Deceleration:= 30000, Jerk:= 100000, InvokeId:= 20); 
+bMovePrepError := bMovePrepError OR fbMoveLinPrep.Error;
+
+aTargetPos[1]				:= 100;
+aTargetPos[2]				:= 100;
+aTargetPos[3]				:= -750;
+//aTargetPos[4]			:= 90;
+aTransitionParam[1]			:= 30; 
+aTransitionParam[2]			:= 35;
+fbMoveLinPrep(PathData:= path , Velocity:= 200, Acceleration:= 30000, Deceleration:= 30000, Jerk:= 100000, InvokeId:= 30);
+bMovePrepError := bMovePrepError OR fbMoveLinPrep.Error; *)
+]]></ST>
+      </Implementation>
+    </Action>
+    <Action Name="A_Init" Id="{91fb8cda-6caf-49eb-b19a-126067aa7c92}">
+      <Implementation>
+        <ST><![CDATA[fbConfigKinGroup(
+			bExecute:=FALSE , 
+			bCartesianMode:=FALSE , 
+			stAxesList:=stAxesConfig , 
+			stKinRefIn:= in_stKinToPlc, 
+			bBusy=> , 
+			bDone=> , 
+			bError=> , 
+			nErrorId=> );
+			
+fbResetKinGroup(
+			bExecute:=FALSE, 
+			nItpChannelId:= , 
+			stKinRefIn:=in_stKinToPlc, 
+			stAxesList:=stAxesConfig, 
+			bBusy=> , 
+			bDone=> , 
+			bError=> , 
+			nErrorId=> );
+			
+fbNCReset.bReset := FALSE;			
+			
+bKinResetDone := FALSE;
+bGroupResetDone := FALSE;
+
+//bPlace1_Set1 := bPlace2_Set1 := bPlace3_Set1 := bPlace4_Set1:= bPlace5_Set1:= bPlace1_Set2 := bPlace2_Set2 := bPlace3_Set2 := bPlace4_Set2 := FALSE;
+
+//bMagnet_Place1_Set1 := bMagnet_Place2_Set1 := bMagnet_Place3_Set1 := bMagnet_Place1_Set2 := bMagnet_Place2_Set2 := bMagnet_Place3_Set2 := FALSE;]]></ST>
+      </Implementation>
+    </Action>
+    <Action Name="A_PreparePathPick" Id="{3560fcfa-322d-48ae-8888-81f5d0899cc3}">
+      <Implementation>
+        <ST><![CDATA[path.ClearPath();  //Clear nodes that were in path
+
+fbMoveLinPrep.Position						:= ADR(aTargetPos); //pointer to position array
+fbMoveLinPrep.PositionCount 				:= cAxesCount; //number of axes in group
+fbMoveLinPrep.TransitionParameter			:= ADR (aTransitionParam); //pointer to transition parameter array
+fbMoveLinPrep.TransitionParameterCount		:= 2; //number of transition parameters, has to be set always 2
+fbMoveLinPrep.BufferMode					:= mcBlendingPrevious;
+fbMoveLinPrep.TransitionMode				:= mcTransModeCornerDistanceAdvanced;
+//Set dynamics to default values of the axes
+fbMoveLinPrep.Acceleration					:= MC_DEFAULT;
+fbMoveLinPrep.Deceleration					:= MC_DEFAULT;
+fbMoveLinPrep.Jerk							:= MC_DEFAULT;
+
+//1st node
+aTargetPos[1]				:= -100;
+aTargetPos[2]				:= -100;
+aTargetPos[3]				:= -600;
+////aTargetPos[4]			:= 0;
+aTransitionParam[1]			:= 0; //blending distance on previous segment, no influence here
+aTransitionParam[2]			:= 0; //blending distance on this segment, no influence here
+fbMoveLinPrep(PathData:= path , Velocity:= 200, Acceleration:= 30000, Deceleration:= 30000, Jerk:= 100000, InvokeId:= 10);
+bMovePrepError := bMovePrepError OR fbMoveLinPrep.Error;
+
+aTargetPos[1]				:= 100;
+aTargetPos[2]				:= 100;
+aTargetPos[3]				:= -600;
+////aTargetPos[4]			:= 90;
+aTransitionParam[1]			:= 30; //blending distance on previous segment (InvokeId=10), defines when to leave line
+aTransitionParam[2]			:= 45; //blending distance on this segment, defines latest positionn to be back  on line of InovkeId=20 
+fbMoveLinPrep(PathData:= path , Velocity:=200, Acceleration:= 30000, Deceleration:= 30000, Jerk:= 100000, InvokeId:= 20); 
+bMovePrepError := bMovePrepError OR fbMoveLinPrep.Error;
+
+aTargetPos[1]				:= 100;
+aTargetPos[2]				:= 100;
+aTargetPos[3]				:= -750;
+////aTargetPos[4]			:= 90;
+aTransitionParam[1]			:= 30; 
+aTransitionParam[2]			:= 35;
+fbMoveLinPrep(PathData:= path , Velocity:= 200, Acceleration:= 30000, Deceleration:= 30000, Jerk:= 100000, InvokeId:= 30);
+bMovePrepError := bMovePrepError OR fbMoveLinPrep.Error;
+]]></ST>
+      </Implementation>
+    </Action>
+    <Action Name="A_PreparePathPlace" Id="{3f8f66fa-0b5d-4c20-9946-24f47808a9af}">
+      <Implementation>
+        <ST><![CDATA[path.ClearPath(); //Clear nodes that were in path
+
+fbMoveLinPrep.Position						:= ADR(aTargetPos); //pointer to position array
+fbMoveLinPrep.PositionCount 				:= cAxesCount; //number of axes in group
+fbMoveLinPrep.TransitionParameter			:= ADR (aTransitionParam); //pointer to transition parameter array
+fbMoveLinPrep.TransitionParameterCount		:= 2; //number of transition parameters, has to be set always 2
+fbMoveLinPrep.BufferMode					:= mcBlendingPrevious;
+fbMoveLinPrep.TransitionMode				:= mcTransModeCornerDistanceAdvanced;
+fbMoveLinPrep.Acceleration					:= MC_DEFAULT;
+fbMoveLinPrep.Deceleration					:= MC_DEFAULT;
+fbMoveLinPrep.Jerk							:= MC_DEFAULT;
+
+aTargetPos[1]				:= 100;
+aTargetPos[2]				:= 100;
+aTargetPos[3]				:= -600;
+//aTargetPos[4]			:= 90;
+aTransitionParam[1]			:= 0; //blending distance on previous segment, no influence here
+aTransitionParam[2]			:= 0; //blending distance on this segment, no influence here
+fbMoveLinPrep(PathData:= path , Velocity:= 200, Acceleration:= 30000, Deceleration:= 30000, Jerk:= 100000, InvokeId:= 15);
+bMovePrepError := bMovePrepError OR fbMoveLinPrep.Error; 
+
+aTargetPos[1]				:= -100;
+aTargetPos[2]				:= -100;
+aTargetPos[3]				:= -600;
+//aTargetPos[4]			:= 0;
+aTransitionParam[1]			:= 30; //blending distance on previous segment (InvokeId=10), defines when to leave line
+aTransitionParam[2]			:= 45; //blending distance on this segment, defines latest positionn to be back  on line of InovkeId=20
+fbMoveLinPrep(PathData:= path , Velocity:= 200, Acceleration:= 30000, Deceleration:= 30000, Jerk:= 100000, InvokeId:= 25);
+bMovePrepError := bMovePrepError OR fbMoveLinPrep.Error;
+
+aTargetPos[1]				:= -100;
+aTargetPos[2]				:= -100;
+aTargetPos[3]				:= -750;
+//aTargetPos[4]			:= 0;
+aTransitionParam[1]			:= 30; 
+aTransitionParam[2]			:= 35;
+fbMoveLinPrep(PathData:= path , Velocity:= 200, Acceleration:= 30000, Deceleration:= 30000, Jerk:= 100000, InvokeId:= 35);
+bMovePrepError := bMovePrepError OR fbMoveLinPrep.Error;
+
+]]></ST>
+      </Implementation>
+    </Action>
+    <Action Name="A_ReadXYZValue" Id="{6e7652aa-84ae-4e11-bbd6-8c37a92f8d9b}">
+      <Implementation>
+        <ST><![CDATA[CASE nManual OF
+	
+	0:
+	A_Init();
+	nManual := 10;
+	bPickCycle := TRUE;
+	fbAddAllAxes(Execute:= FALSE);
+	fbGroupEnable(AxesGroup:=stGroupRef , Execute:=FALSE);
+	fbMovePath(AxesGroup:=stGroupRef ,PathData:=path ,Execute:= FALSE);
+	bMovePrepError := FALSE;
+
+10:	
+	fbPower.fOverride := 100.0;
+	fbPower.bEnableAxes := TRUE;
+	
+	IF fbPower.bAllAxesReady THEN
+		nManual := 20;
+	ELSIF	fbPower.Error THEN
+		nState := 90;	
+	END_IF
+	
+20:
+	bUserConfigGroup:=TRUE;
+	bUserCartesianMode:=TRUE;
+
+
+	fbConfigKinGroup(
+		bExecute:=bUserConfigGroup , 
+		bCartesianMode:=bUserCartesianMode , 
+		stAxesList:=stAxesConfig , 
+		stKinRefIn:= in_stKinToPlc, 
+		bBusy=> , 
+		bDone=> , 
+		bError=> , 
+		nErrorId=> );
+	
+
+	IF fbConfigKinGroup.bDone THEN
+		nManual := 100;
+	ELSIF fbConfigKinGroup.bError THEN
+		nState:= 90;
+	END_IF
+	(*
+30:
+	//Add all axes to group
+	fbAddAllAxes(Execute:= TRUE);
+	
+	IF fbAddAllAxes.Done THEN
+		fbAddAllAxes(Execute:= FALSE);
+		nManual := 40;
+	ELSIF fbAddAllAxes.Error THEN
+		nState := 90;
+	END_IF
+	
+40:	
+	//Enable Group
+	fbGroupEnable(AxesGroup:=stGroupRef , Execute:=TRUE);
+	 
+	IF fbGroupEnable.Done THEN
+			fbGroupEnable(AxesGroup:=stGroupRef , Execute:=FALSE);
+			nManual := 50;
+	ELSIF fbGroupEnable.Error THEN
+		nState := 90;
+	END_IF
+	*)
+END_CASE	]]></ST>
+      </Implementation>
+    </Action>
+    <Method Name="MoveToPositionGeneral" Id="{190f7dcc-1ef3-4274-a15f-f897ada789cb}">
+      <Declaration><![CDATA[METHOD MoveToPositionGeneral
+VAR_INPUT
+	currentFrame : StructFrame;
+	targetFrame : StructFrame;
+	interpolation : INT; // interpolates intermittant frames by n number of times
+END_VAR
+
+VAR
+	unitVector : StructFrame;
+	i: INT;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[path.ClearPath();  //Clear nodes that were in path
+
+fbMoveLinPrep.Position						:= ADR(aTargetPos); //pointer to position array
+fbMoveLinPrep.PositionCount 				:= cAxesCount; //number of axes in group
+fbMoveLinPrep.TransitionParameter			:= ADR (aTransitionParam); //pointer to transition parameter array
+fbMoveLinPrep.TransitionParameterCount		:= 2; //number of transition parameters, has to be set always 2
+fbMoveLinPrep.BufferMode					:= mcBlendingPrevious;
+fbMoveLinPrep.TransitionMode				:= mcTransModeCornerDistanceAdvanced;
+//Set dynamics to default values of the axes
+fbMoveLinPrep.Acceleration					:= MC_DEFAULT;
+fbMoveLinPrep.Deceleration					:= MC_DEFAULT;
+fbMoveLinPrep.Jerk							:= MC_DEFAULT;
+
+(* I want to interpolate frames by taking current frame and  next frame,
+	and split into N sections, how do i retrieve the current frame? *)
+	
+unitVector.rXpos := (targetFrame.rXpos - currentFrame.rXpos)/interpolation;
+unitVector.rYpos := (targetFrame.rYpos - currentFrame.rYpos)/interpolation;
+unitVector.rZpos := (targetFrame.rZpos - currentFrame.rZpos)/interpolation;
+
+FOR i:=0 TO interpolation  DO
+
+	//1st node
+	aTargetPos[1]				:= currentFrame.rXpos + i * unitVector.rXpos;
+	aTargetPos[2]				:= currentFrame.rYpos + i * unitVector.rYpos;
+	aTargetPos[3]				:= currentFrame.rZpos + i * unitVector.rZpos;
+	//aTargetPos[4]			:= 0;
+	aTransitionParam[1]			:= 0; //blending distance on previous segment, no influence here
+	aTransitionParam[2]			:= 0; //blending distance on this segment, no influence here
+	fbMoveLinPrep(PathData:= path , Velocity:= GVL.lrSpeed, Acceleration:= GVL.acceleration, Deceleration:= GVL.acceleration, Jerk:= 100000, InvokeId:= 30);
+	bMovePrepError := bMovePrepError OR fbMoveLinPrep.Error;
+	IF bMovePrepError THEN
+		EXIT;
+	END_IF
+
+END_FOR
+
+
+(*
+aTargetPos[1]				:= 100;
+aTargetPos[2]				:= 100;
+aTargetPos[3]				:= -600;
+//aTargetPos[4]			:= 90;
+aTransitionParam[1]			:= 30; //blending distance on previous segment (InvokeId=10), defines when to leave line
+aTransitionParam[2]			:= 45; //blending distance on this segment, defines latest positionn to be back  on line of InovkeId=20 
+fbMoveLinPrep(PathData:= path , Velocity:=200, Acceleration:= 30000, Deceleration:= 30000, Jerk:= 100000, InvokeId:= 20); 
+bMovePrepError := bMovePrepError OR fbMoveLinPrep.Error;
+
+aTargetPos[1]				:= 100;
+aTargetPos[2]				:= 100;
+aTargetPos[3]				:= -750;
+//aTargetPos[4]			:= 90;
+aTransitionParam[1]			:= 30; 
+aTransitionParam[2]			:= 35;
+fbMoveLinPrep(PathData:= path , Velocity:= 200, Acceleration:= 30000, Deceleration:= 30000, Jerk:= 100000, InvokeId:= 30);
+bMovePrepError := bMovePrepError OR fbMoveLinPrep.Error; *)
+]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="MovetoPositionInit" Id="{f6c1e119-c6a2-447c-8fea-f85cf95db476}">
+      <Declaration><![CDATA[METHOD MovetoPositionInit
+VAR_INPUT
+	targetFrame : StructFrame;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[path.ClearPath();  //Clear nodes that were in path
+
+fbMoveLinPrep.Position						:= ADR(aTargetPos); //pointer to position array
+fbMoveLinPrep.PositionCount 				:= cAxesCount; //number of axes in group
+fbMoveLinPrep.TransitionParameter			:= ADR (aTransitionParam); //pointer to transition parameter array
+fbMoveLinPrep.TransitionParameterCount		:= 2; //number of transition parameters, has to be set always 2
+fbMoveLinPrep.BufferMode					:= mcBlendingPrevious;
+fbMoveLinPrep.TransitionMode				:= mcTransModeCornerDistanceAdvanced;
+//Set dynamics to default values of the axes
+fbMoveLinPrep.Acceleration					:= MC_DEFAULT;
+fbMoveLinPrep.Deceleration					:= MC_DEFAULT;
+fbMoveLinPrep.Jerk							:= MC_DEFAULT;
+
+(* I want to interpolate frames by taking current frame and  next frame,
+	and split into N sections, how do i retrieve the current frame? *)
+
+//1st node
+aTargetPos[1]				:= targetFrame.rXpos;
+aTargetPos[2]				:= targetFrame.rYpos;
+aTargetPos[3]				:= targetFrame.rZpos;
+////aTargetPos[4]			:= 0;
+aTransitionParam[1]			:= 0; //blending distance on previous segment, no influence here
+aTransitionParam[2]			:= 0; //blending distance on this segment, no influence here
+fbMoveLinPrep(PathData:= path , Velocity:= GVL.lrSpeed, Acceleration:= GVL.acceleration, Deceleration:= GVL.acceleration, Jerk:= 100000, InvokeId:= 30);
+bMovePrepError := bMovePrepError OR fbMoveLinPrep.Error;]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="Round2DP" Id="{82ad030c-b962-46b3-b2c9-4df5e90ebed9}">
+      <Declaration><![CDATA[METHOD Round2DP : LREAL
+VAR_INPUT
+	Num : LREAL;
+END_VAR
+VAR
+	meh : INT;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[Num := Num * 100;
+meh := REAL_TO_INT(Num);
+Num := INT_TO_REAL(meh);
+Num := Num / 100;
+Round2DP := Num;]]></ST>
+      </Implementation>
+    </Method>
+    <LineIds Name="RunXbox">
+      <LineId Id="3" Count="8" />
+      <LineId Id="618" Count="0" />
+      <LineId Id="617" Count="0" />
+      <LineId Id="14" Count="13" />
+      <LineId Id="281" Count="0" />
+      <LineId Id="292" Count="4" />
+      <LineId Id="282" Count="8" />
+      <LineId Id="298" Count="3" />
+      <LineId Id="297" Count="0" />
+      <LineId Id="28" Count="1" />
+      <LineId Id="34" Count="2" />
+      <LineId Id="366" Count="0" />
+      <LineId Id="368" Count="5" />
+      <LineId Id="405" Count="6" />
+      <LineId Id="403" Count="1" />
+      <LineId Id="37" Count="22" />
+      <LineId Id="375" Count="0" />
+      <LineId Id="377" Count="17" />
+      <LineId Id="376" Count="0" />
+      <LineId Id="412" Count="0" />
+      <LineId Id="396" Count="1" />
+      <LineId Id="399" Count="1" />
+      <LineId Id="402" Count="0" />
+      <LineId Id="398" Count="0" />
+      <LineId Id="374" Count="0" />
+      <LineId Id="60" Count="36" />
+      <LineId Id="473" Count="0" />
+      <LineId Id="1062" Count="0" />
+      <LineId Id="1101" Count="0" />
+      <LineId Id="544" Count="0" />
+      <LineId Id="1084" Count="1" />
+      <LineId Id="1083" Count="0" />
+      <LineId Id="1094" Count="2" />
+      <LineId Id="1091" Count="0" />
+      <LineId Id="1099" Count="1" />
+      <LineId Id="1102" Count="7" />
+      <LineId Id="1111" Count="6" />
+      <LineId Id="1110" Count="0" />
+      <LineId Id="1118" Count="0" />
+      <LineId Id="1120" Count="6" />
+      <LineId Id="1119" Count="0" />
+      <LineId Id="98" Count="0" />
+      <LineId Id="1098" Count="0" />
+      <LineId Id="1097" Count="0" />
+      <LineId Id="884" Count="11" />
+      <LineId Id="882" Count="0" />
+      <LineId Id="111" Count="8" />
+      <LineId Id="250" Count="0" />
+      <LineId Id="121" Count="95" />
+      <LineId Id="614" Count="0" />
+      <LineId Id="616" Count="0" />
+      <LineId Id="2" Count="0" />
+    </LineIds>
+    <LineIds Name="RunXbox.A_AlwaysActive">
+      <LineId Id="2" Count="43" />
+      <LineId Id="55" Count="0" />
+      <LineId Id="57" Count="6" />
+      <LineId Id="46" Count="8" />
+      <LineId Id="1" Count="0" />
+    </LineIds>
+    <LineIds Name="RunXbox.A_EnableManualMovement">
+      <LineId Id="2" Count="7" />
+      <LineId Id="11" Count="0" />
+      <LineId Id="10" Count="0" />
+    </LineIds>
+    <LineIds Name="RunXbox.A_HomePosition">
+      <LineId Id="2" Count="43" />
+      <LineId Id="1" Count="0" />
+    </LineIds>
+    <LineIds Name="RunXbox.A_Init">
+      <LineId Id="2" Count="19" />
+      <LineId Id="31" Count="6" />
+      <LineId Id="1" Count="0" />
+    </LineIds>
+    <LineIds Name="RunXbox.A_PreparePathPick">
+      <LineId Id="2" Count="39" />
+      <LineId Id="1" Count="0" />
+    </LineIds>
+    <LineIds Name="RunXbox.A_PreparePathPlace">
+      <LineId Id="2" Count="38" />
+      <LineId Id="1" Count="0" />
+    </LineIds>
+    <LineIds Name="RunXbox.A_ReadXYZValue">
+      <LineId Id="2" Count="64" />
+      <LineId Id="1" Count="0" />
+    </LineIds>
+    <LineIds Name="RunXbox.MoveToPositionGeneral">
+      <LineId Id="8" Count="11" />
+      <LineId Id="50" Count="0" />
+      <LineId Id="49" Count="0" />
+      <LineId Id="51" Count="0" />
+      <LineId Id="58" Count="1" />
+      <LineId Id="67" Count="1" />
+      <LineId Id="70" Count="0" />
+      <LineId Id="69" Count="0" />
+      <LineId Id="20" Count="9" />
+      <LineId Id="75" Count="2" />
+      <LineId Id="73" Count="0" />
+      <LineId Id="72" Count="0" />
+      <LineId Id="74" Count="0" />
+      <LineId Id="48" Count="0" />
+      <LineId Id="30" Count="17" />
+      <LineId Id="5" Count="0" />
+    </LineIds>
+    <LineIds Name="RunXbox.MovetoPositionInit">
+      <LineId Id="62" Count="23" />
+      <LineId Id="5" Count="0" />
+    </LineIds>
+    <LineIds Name="RunXbox.Round2DP">
+      <LineId Id="6" Count="3" />
+      <LineId Id="5" Count="0" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

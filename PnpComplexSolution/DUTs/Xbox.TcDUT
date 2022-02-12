@@ -1,0 +1,21 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.9">
+  <DUT Name="Xbox" Id="{37b8ff0d-507a-40a5-a97c-b726a6ee4baa}">
+    <Declaration><![CDATA[TYPE Xbox :
+STRUCT
+	bDpadUp : BOOL;
+	bDpadDown : BOOL;
+	bDpadLeft : BOOL;
+	bDpadRight : BOOL;
+	
+	bXbtn : BOOL;
+	bYbtn : BOOL;
+	bBbtn : BOOL;
+	bAbtn : BOOL;
+	
+	leftStick : ARRAY [0..2] OF REAL;
+	rightStick : ARRAY [0..2] OF REAL;
+END_STRUCT
+END_TYPE]]></Declaration>
+  </DUT>
+</TcPlcObject>

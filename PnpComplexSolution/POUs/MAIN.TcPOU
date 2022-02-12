@@ -1,0 +1,65 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.9">
+  <POU Name="MAIN" Id="{6f26785d-3141-4d83-8f28-dd4e0f083bd8}" SpecialFunc="None">
+    <Declaration><![CDATA[PROGRAM MAIN
+VAR
+	init : INT := 0;
+	flag : INT := 0;
+END_VAR
+
+VAR_INPUT
+	bmanual : BOOL;
+	bPowerDisable: BOOL;
+	bReadDone : BOOL;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[HMILogic();
+LoadModel();
+
+Run.A_AlwaysActive();
+
+IF bPowerDisable THEN
+	Run.A_EnableManualMovement();
+	Run.nManual := 0;
+	flag := 0;
+END_IF
+
+IF bmanual THEN
+	Run.A_ReadXYZValue();
+	bReadDone := TRUE;
+	
+END_IF
+
+IF HMILogic.bRun THEN
+	IF flag = 0 THEN
+		Run.A_EnableManualMovement();
+		flag := flag + 1;
+	END_IF
+	Run(arrangedFrames := HMILogic.ArrangedFrames);
+END_IF]]></ST>
+    </Implementation>
+    <LineIds Name="MAIN">
+      <LineId Id="8" Count="0" />
+      <LineId Id="137" Count="0" />
+      <LineId Id="76" Count="1" />
+      <LineId Id="84" Count="1" />
+      <LineId Id="94" Count="0" />
+      <LineId Id="122" Count="0" />
+      <LineId Id="152" Count="0" />
+      <LineId Id="96" Count="0" />
+      <LineId Id="21" Count="0" />
+      <LineId Id="16" Count="0" />
+      <LineId Id="101" Count="0" />
+      <LineId Id="126" Count="0" />
+      <LineId Id="125" Count="0" />
+      <LineId Id="81" Count="0" />
+      <LineId Id="112" Count="0" />
+      <LineId Id="9" Count="0" />
+      <LineId Id="151" Count="0" />
+      <LineId Id="150" Count="0" />
+      <LineId Id="153" Count="1" />
+      <LineId Id="5" Count="0" />
+      <LineId Id="10" Count="0" />
+    </LineIds>
+  </POU>
+</TcPlcObject>
